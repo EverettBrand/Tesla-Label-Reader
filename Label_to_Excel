@@ -1,0 +1,86 @@
+import pytesseract
+from PIL import Image
+import openpyxl
+import os
+
+# Set up Tesseract OCR executable path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Adjust path based on your installation
+
+# Function to extract text from an image
+def extract_text_from_image(image_path):
+    try:
+        img = Image.open(image_path)
+        text = pytesseract.image_to_string(img)
+        return text
+    except Exception as e:
+        print(f"Error reading image: {e}")
+        return None
+
+# Function to parse extracted text into relevant fields
+def parse_parts_tag(text):
+    lines = text.splitlines()
+    data = {}
+    for line in lines:
+        if "MOULDING" in line or "PANEL" in line or "ASSY" in line:  # Common keywords for part names
+            data['Name'] = line.strip()
+        elif any(char.isdigit() for char in line) and '-' in line:  # General pattern for part numbers
+            data['Part Number'] = line.strip()
+    return data
+
+# Function to write data to an Excel sheet
+def write_to_excel(data_list, excel_file):
+    try:
+        # Check if file exists
+        if os.path.exists(excel_file):
+            wb = openpyxl.load_workbook(excel_file)
+        else:
+            wb = openpyxl.Workbook()
+
+        sheet = wb.active
+        # Create headers if empty sheet
+        if sheet.max_row == 1 and sheet.max_column == 1:
+            sheet.append(['Part Number', 'Name'])
+
+        # Add data
+        for data in data_list:
+            sheet.append([
+                data.get('Part Number', ''),
+                data.get('Name', '')
+            ])
+
+        # Save file
+        wb.save(excel_file)
+        print(f"Data successfully written to {excel_file}")
+    except Exception as e:
+        print(f"Error writing to Excel: {e}")
+
+# Main program
+def main():
+    folder_path = input("Enter the path to the folder containing Tesla parts tag images: ")
+    excel_file = 'TeslaPartsData.xlsx'
+
+    if not os.path.isdir(folder_path):
+        print("Invalid folder path. Please check and try again.")
+        return
+
+    data_list = []
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            print(f"Processing {filename}...")
+            extracted_text = extract_text_from_image(file_path)
+            if extracted_text:
+                parsed_data = parse_parts_tag(extracted_text)
+                if parsed_data:
+                    data_list.append(parsed_data)
+
+    if not data_list:
+        print("No valid data extracted from the images.")
+        return
+
+    # Write all extracted data to Excel
+    write_to_excel(data_list, excel_file)
+
+if __name__ == "__main__":
+    main()
